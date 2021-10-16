@@ -1,6 +1,8 @@
 import json
 
 import requests
+import asyncio
+import websockets
 
 from enums import (
     Exchange,
@@ -28,6 +30,10 @@ class Station(object):
             "POST", self.rest_url + "/token", json={"APIPassword": password}
         )
         self.token = Station.parse(r)["Token"]
+
+    def msg_handler(self, msg):
+        print(msg)
+        print("Inherit Station class and rewrite this (msg_handler) method...")
 
     def send_order(
         self,
@@ -71,23 +77,26 @@ class Station(object):
             json["ReverseLimitOrder"]: reserve_limit_order
         return self.rest("POST", "/sendorder", json)
 
-    def cancel_order(order_id):
+    def cancel_order(self, order_id):
         json = {
             "OrderId": order_id,
             "Password": self.password,
         }
         return self.rest("PUT", "/cancelorder", json)
 
-    def register(symbols):
+    def register(self, symbols):
         json = {"Symbols": symbols}
         return self.rest("PUT", "/register", json)
 
-    def unregister(symbols):
+    def unregister(self, symbols):
         json = {"Symbols": symbols}
         return self.rest("PUT", "/unregister", json)
 
-    def unregister_all():
-        return self.rest("PUT", "/unregister/all", json)
+    def unregister_all(self):
+        return self.rest("PUT", "/unregister/all")
+
+    def register_tosyou(self, symbol):
+        self.register([{"Symbol": str(symbol), "Exchange": Exchange.tosyou.value}])
 
     def rest(self, method, api, json=None):
         headers = {"X-API-KEY": self.token}
@@ -100,3 +109,12 @@ class Station(object):
             return json.loads(r.content)
         else:
             raise requests.HTTPError(f"\n\n{r.status_code}: {r.reason}\n")
+
+    def run(self):
+        async def main():
+            async with websockets.connect(self.ws_url) as ws:
+                while True:
+                    msg = await ws.recv()
+                    self.msg_handler(msg)
+
+        asyncio.run(main())
