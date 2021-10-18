@@ -112,7 +112,7 @@ class Station(object):
 
     def run(self):
         async def main():
-            async with websockets.connect(self.ws_url) as ws:
+            async with websockets.connect(self.ws_url, ping_interval=None) as ws:
                 while True:
                     msg = await ws.recv()
                     self.msg_handler(msg)
