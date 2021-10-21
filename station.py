@@ -1,3 +1,4 @@
+from pprint import pprint
 import json
 
 import requests
@@ -19,6 +20,7 @@ from enums import (
 
 class Station(object):
     def __init__(self, password, test=False):
+        self.password = password
         if test:
             port = 18081
         else:
@@ -42,12 +44,12 @@ class Station(object):
         side: Side,
         cash_margin: CashMargin,
         deliv_type: DelivType,
-        fund_type: FundType,
         account_type: AccountType,
         qty,
         front_order_type: FrontOrderType,
         price=0,
         expire_day=0,
+        fund_type=None,
         margin_trade_type=None,
         close_position_order=None,
         close_positions=None,
@@ -67,15 +69,129 @@ class Station(object):
             "Price": price,
             "ExpireDay": expire_day,
         }
+        if fund_type:
+            json["FundType"] = fund_type.value
         if margin_trade_type:
-            json["MarginTradeType"]: margin_trade_type.value
+            json["MarginTradeType"] = margin_trade_type.value
         if close_position_order:
-            json["ClosePositionOrder"]: close_position_order.value
+            json["ClosePositionOrder"] = close_position_order.value
         if close_positions:
-            json["ClosePositions"]: close_positions
+            json["ClosePositions"] = close_positions
         if reserve_limit_order:
-            json["ReverseLimitOrder"]: reserve_limit_order
+            json["ReverseLimitOrder"] = reserve_limit_order
         return self.rest("POST", "/sendorder", json)
+
+    def margin_sell_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.normal,
+            qty,
+            FrontOrderType.limit,
+            price=price,
+            margin_trade_type=MarginType.system,
+        )
+
+    def margin_sell_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.normal,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.system,
+        )
+
+    def margin_buy_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.normal,
+            qty,
+            FrontOrderType.limit,
+            price=price,
+            margin_trade_type=MarginType.system,
+        )
+
+    def margin_buy_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.normal,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.system,
+        )
+
+    def repay_buy_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.normal,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.system,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
+
+    def repay_sell_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.normal,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.system,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
+
+    def repay_buy_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.normal,
+            qty,
+            FrontOrderType.limit,
+            price=price,
+            margin_trade_type=MarginType.system,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
+
+    def repay_sell_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.normal,
+            qty,
+            FrontOrderType.limit,
+            price=price,
+            margin_trade_type=MarginType.system,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
 
     def cancel_order(self, order_id):
         json = {
@@ -108,6 +224,7 @@ class Station(object):
         if r.status_code == 200:
             return json.loads(r.content)
         else:
+            pprint(json.loads(r.content))
             raise requests.HTTPError(f"\n\n{r.status_code}: {r.reason}\n")
 
     def run(self):
