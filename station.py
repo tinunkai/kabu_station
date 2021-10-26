@@ -1,11 +1,14 @@
 from pprint import pprint
 import json
+from datetime import datetime
 
 import requests
 import asyncio
 import websockets
 
 from enums import (
+    Product,
+    State,
     Exchange,
     Side,
     CashMargin,
@@ -20,6 +23,8 @@ from enums import (
 
 class Station(object):
     def __init__(self, password, test=False):
+        self.now = datetime.now()
+        self.running = True
         self.password = password
         if test:
             port = 18081
@@ -33,9 +38,72 @@ class Station(object):
         )
         self.token = Station.parse(r)["Token"]
 
-    def msg_handler(self, msg):
-        print(msg)
-        print("Inherit Station class and rewrite this (msg_handler) method...")
+    def get_wallet_margin(self):
+        return self.rest("GET", "/wallet/margin")
+
+    def get_margin_positions(self):
+        positions = self.get_positions(product=Product.margin)
+        rsts = list()
+        for position in positions:
+            if position["HoldQty"] != 0 or position["LeavesQty"] != 0:
+                rsts.append(position)
+        return rsts
+
+    def get_margin_orders(self):
+        orders = self.get_orders(product=Product.margin)
+        rsts = list()
+        for order in orders:
+            if order["State"] != 5:
+                rsts.append(order)
+        return rsts
+
+    def get_positions(
+        self,
+        product=None,
+        symbol=None,
+        side=None,
+        addinfo=None,
+    ):
+        params = dict()
+        if product is not None:
+            params["product"] = product.value
+        if symbol is not None:
+            params["symbol"] = symbol
+        if side is not None:
+            params["side"] = side.value
+        if addinfo is not None:
+            params["addinfo"] = addinfo
+        return self.rest("GET", "/positions", params=params)
+
+    def get_orders(
+        self,
+        product=None,
+        id=None,
+        updtime=None,
+        details=None,
+        symbol=None,
+        state=None,
+        side=None,
+        cashmargin=None,
+    ):
+        params = dict()
+        if product is not None:
+            params["product"] = product.value
+        if id is not None:
+            params["id"] = id
+        if updtime is not None:
+            params["updtime"] = updtime
+        if details is not None:
+            params["details"] = details
+        if symbol is not None:
+            params["symbol"] = symbol
+        if state is not None:
+            params["state"] = state.value
+        if side is not None:
+            params["side"] = side.value
+        if cashmargin is not None:
+            params["cashmargin"] = cashmargin.value
+        return self.rest("GET", "/orders", params=params)
 
     def send_order(
         self,
@@ -214,10 +282,16 @@ class Station(object):
     def register_tosyou(self, symbol):
         self.register([{"Symbol": str(symbol), "Exchange": Exchange.tosyou.value}])
 
-    def rest(self, method, api, json=None):
+    def rest(self, method, api, json=None, params=None):
         headers = {"X-API-KEY": self.token}
-        r = requests.request(method, self.rest_url + api, json=json, headers=headers)
+        r = requests.request(
+            method, self.rest_url + api, json=json, params=params, headers=headers
+        )
         return Station.parse(r)
+
+    def msg_handler(self, msg):
+        print(msg)
+        print("Inherit Station class and rewrite this (msg_handler) method...")
 
     @staticmethod
     def parse(r):
@@ -229,8 +303,10 @@ class Station(object):
 
     def run(self):
         async def main():
-            async with websockets.connect(self.ws_url, ping_interval=None) as ws:
-                while True:
+            async with websockets.connect(
+                self.ws_url, ping_interval=None, close_timeout=0
+            ) as ws:
+                while self.running:
                     msg = await ws.recv()
                     self.msg_handler(msg)
 
