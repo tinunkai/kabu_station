@@ -1,6 +1,22 @@
 from enum import Enum
 
 
+class Product(Enum):
+    all = "0"
+    cash = "1"
+    margin = "2"
+    future = "3"
+    option = "4"
+
+
+class State(Enum):
+    standby = "1"
+    processing = "2"
+    processed = "3"
+    correcting = "4"
+    finished = "5"
+
+
 class Exchange(Enum):
     tosyou = 1
     meisyou = 3

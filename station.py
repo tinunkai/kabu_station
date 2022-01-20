@@ -1,6 +1,7 @@
 from pprint import pprint
 import json
 from datetime import datetime
+import pickle
 
 import requests
 import asyncio
@@ -22,7 +23,7 @@ from enums import (
 
 
 class Station(object):
-    def __init__(self, password, test=False):
+    def __init__(self, password, test=False, retoken=True):
         self.now = datetime.now()
         self.running = True
         self.password = password
@@ -33,10 +34,19 @@ class Station(object):
         self.rest_url = f"http://localhost:{port}/kabusapi"
         self.ws_url = f"ws://localhost:{port}/kabusapi/websocket"
 
-        r = requests.request(
-            "POST", self.rest_url + "/token", json={"APIPassword": password}
-        )
-        self.token = Station.parse(r)["Token"]
+        if retoken:
+            r = requests.request(
+                "POST", self.rest_url + "/token", json={"APIPassword": password}
+            )
+            self.token = Station.parse(r)["Token"]
+            with open("./cache/token.pkl", "wb") as f:
+                pickle.dump(self.token, f)
+        else:
+            with open("./cache/token.pkl", "rb") as f:
+                self.token = pickle.load(f)
+
+    def get_all_orders(self):
+        return self.rest("GET", "/orders")
 
     def get_wallet_margin(self):
         return self.rest("GET", "/wallet/margin")
