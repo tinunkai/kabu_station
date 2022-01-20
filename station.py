@@ -24,7 +24,6 @@ from enums import (
 
 class Station(object):
     def __init__(self, password, test=False, retoken=True):
-        self.now = datetime.now()
         self.running = True
         self.password = password
         if test:
