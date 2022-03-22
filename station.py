@@ -2,6 +2,7 @@ from pprint import pprint
 import json
 from datetime import datetime
 import pickle
+import threading
 
 import requests
 import asyncio
@@ -23,7 +24,8 @@ from enums import (
 
 
 class Station(object):
-    def __init__(self, password, test=False, retoken=True):
+    def __init__(self, password, test=True, retoken=False):
+        self.now = datetime.now()
         self.running = True
         self.password = password
         if test:
@@ -43,6 +45,8 @@ class Station(object):
         else:
             with open("./cache/token.pkl", "rb") as f:
                 self.token = pickle.load(f)
+        self.lock = threading.Lock()
+        self.msgs = dict()
 
     def get_all_orders(self):
         return self.rest("GET", "/orders")
@@ -54,7 +58,7 @@ class Station(object):
         positions = self.get_positions(product=Product.margin)
         rsts = list()
         for position in positions:
-            if position["HoldQty"] != 0 or position["LeavesQty"] != 0:
+            if position["LeavesQty"] != 0:
                 rsts.append(position)
         return rsts
 
@@ -65,6 +69,15 @@ class Station(object):
             if order["State"] != 5:
                 rsts.append(order)
         return rsts
+
+    def get_daily_orders(self):
+        today = (
+            datetime.now()
+            .replace(hour=0, minute=0, second=0, microsecond=0)
+            .strftime("%Y%m%d%H%M%S")
+        )
+        orders = self.get_orders(product=Product.margin, updtime=today)
+        return orders
 
     def get_positions(
         self,
@@ -165,7 +178,7 @@ class Station(object):
             Side.sell,
             CashMargin.margin,
             DelivType.none,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.limit,
             price=price,
@@ -179,7 +192,7 @@ class Station(object):
             Side.sell,
             CashMargin.margin,
             DelivType.none,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.market,
             margin_trade_type=MarginType.system,
@@ -192,7 +205,7 @@ class Station(object):
             Side.buy,
             CashMargin.margin,
             DelivType.none,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.limit,
             price=price,
@@ -206,7 +219,7 @@ class Station(object):
             Side.buy,
             CashMargin.margin,
             DelivType.none,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.market,
             margin_trade_type=MarginType.system,
@@ -219,7 +232,7 @@ class Station(object):
             Side.buy,
             CashMargin.repay,
             DelivType.deposit,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.market,
             margin_trade_type=MarginType.system,
@@ -233,7 +246,7 @@ class Station(object):
             Side.sell,
             CashMargin.repay,
             DelivType.deposit,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.market,
             margin_trade_type=MarginType.system,
@@ -247,7 +260,7 @@ class Station(object):
             Side.buy,
             CashMargin.repay,
             DelivType.deposit,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.limit,
             price=price,
@@ -262,11 +275,123 @@ class Station(object):
             Side.sell,
             CashMargin.repay,
             DelivType.deposit,
-            AccountType.normal,
+            AccountType.specific,
             qty,
             FrontOrderType.limit,
             price=price,
             margin_trade_type=MarginType.system,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
+
+    def day_sell_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.specific,
+            qty,
+            FrontOrderType.limit,
+            price=price,
+            margin_trade_type=MarginType.day_trade,
+        )
+
+    def day_sell_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.specific,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.day_trade,
+        )
+
+    def day_buy_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.specific,
+            qty,
+            FrontOrderType.limit,
+            price=price,
+            margin_trade_type=MarginType.day_trade,
+        )
+
+    def day_buy_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.margin,
+            DelivType.none,
+            AccountType.specific,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.day_trade,
+        )
+
+    def day_repay_buy_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.specific,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.day_trade,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
+
+    def day_repay_sell_market(self, symbol, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.specific,
+            qty,
+            FrontOrderType.market,
+            margin_trade_type=MarginType.day_trade,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
+
+    def day_repay_buy_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.buy,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.specific,
+            qty,
+            FrontOrderType.no_limit_pm,
+            price=price,
+            margin_trade_type=MarginType.day_trade,
+            close_position_order=ClosePosition.high_profit_old_date,
+        )
+
+    def day_repay_sell_limit(self, symbol, price, qty):
+        return self.send_order(
+            symbol,
+            Exchange.tosyou,
+            Side.sell,
+            CashMargin.repay,
+            DelivType.deposit,
+            AccountType.specific,
+            qty,
+            FrontOrderType.no_limit_pm,
+            price=price,
+            margin_trade_type=MarginType.day_trade,
             close_position_order=ClosePosition.high_profit_old_date,
         )
 
@@ -299,8 +424,10 @@ class Station(object):
         return Station.parse(r)
 
     def msg_handler(self, msg):
-        print(msg)
-        print("Inherit Station class and rewrite this (msg_handler) method...")
+        msg = json.loads(msg)
+        self.lock.acquire()
+        self.msgs[msg["Symbol"]] = msg
+        self.lock.release()
 
     @staticmethod
     def parse(r):
@@ -310,7 +437,7 @@ class Station(object):
             pprint(json.loads(r.content))
             raise requests.HTTPError(f"\n\n{r.status_code}: {r.reason}\n")
 
-    def run(self):
+    def ws_handler(self):
         async def main():
             async with websockets.connect(
                 self.ws_url, ping_interval=None, close_timeout=0
@@ -320,3 +447,6 @@ class Station(object):
                     self.msg_handler(msg)
 
         asyncio.run(main())
+
+    def ws_runner(self):
+        threading.Thread(target=self.ws_handler).start()
